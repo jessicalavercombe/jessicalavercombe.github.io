@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Free Demo: Online Exam Simulator</title>
+<style>
+body{font-family:Verdana,Arial,sans-serif;font-size:22px;line-height:1.5;margin:0;background:#fafaf7;color:#1a1a1a}
+main{max-width:760px;margin:0 auto;padding:20px}
+h1{font-size:30px;margin:10px 0}
+button{font-size:22px;padding:14px 22px;margin:8px 8px 8px 0;border-radius:10px;border:2px solid #1a3d6d;background:#fff;color:#1a3d6d;cursor:pointer}
+button.main{background:#1a3d6d;color:#fff}
+.card{background:#fff;border:2px solid #ddd;border-radius:14px;padding:22px;margin:16px 0}
+.q{font-size:28px;font-weight:bold}
+.small{font-size:18px;color:#555}
+.ok{color:#1d6b2f;font-weight:bold}.no{color:#a12222;font-weight:bold}
+select{font-size:22px;padding:8px}
+footer{font-size:16px;color:#555;margin-top:30px}
+.ctl button{display:block;width:100%;margin:10px 0;text-align:center}
+.confirm{background:#fff3c4;border:2px solid #e0b100;border-radius:14px;padding:18px;margin:12px 0}
+.confirm button{display:inline-block;width:auto;min-width:120px}
+.locked li{color:#8a8a8a;list-style:none;margin:10px 0;padding-left:0}
+.locked li span{display:inline-block;width:1.6em}
+.unlock{background:#1a3d6d;color:#fff;border-radius:14px;padding:22px;margin:16px 0}
+</style></head><body><main>
+<h1>Online Exam Simulator: Free Demo</h1>
+<p class="small">Try 10 questions from the 2025 civics test. The officer asks questions out loud and you answer out loud. Do the same here: read or listen to the question, say your answer, then check it.</p>
+<div id="app"></div>
+<footer>From "US Citizenship Test Study Guide 2027 and 2028 in Large Print" by Jessica T. Lavercombe. Independent study guide. Not affiliated with or endorsed by USCIS or any government agency.</footer>
+</main>
+<script>
+const Q=[{"n": 1, "q": "What is the form of government of the United States?", "a": ["Republic", "Constitution-based federal republic", "Representative democracy"], "star": false, "need": 1, "tip": "Republic: the people choose who leads."}, {"n": 2, "q": "What is the supreme law of the land?", "a": ["(U.S.) Constitution"], "star": true, "need": 1, "tip": "Supreme means highest."}, {"n": 16, "q": "Name the three branches of government.", "a": ["Legislative, executive, and judicial", "Congress, president, and the courts"], "star": false, "need": 1, "tip": "Make, carry out, explain."}, {"n": 36, "q": "The President of the United States is elected for how many years?", "a": ["Four (4) years"], "star": true, "need": 1, "tip": "President: four years."}, {"n": 65, "q": "What are three rights of everyone living in the United States?", "a": ["Freedom of expression", "Freedom of speech", "Freedom of assembly", "Freedom to petition the government", "Freedom of religion", "The right to bear arms"], "star": false, "need": 3, "tip": "Speech, religion, assembly."}, {"n": 66, "q": "What do we show loyalty to when we say the Pledge of Allegiance?", "a": ["The United States", "The flag"], "star": true, "need": 1, "tip": "Loyalty to the flag and the country."}, {"n": 79, "q": "When was the Declaration of Independence adopted?", "a": ["July 4, 1776"], "star": false, "need": 1, "tip": "July 4, 1776."}, {"n": 86, "q": "George Washington is famous for many things. Name one.", "a": ["\"Father of Our Country\"", "First president of the United States", "General of the Continental Army", "President of the Constitutional Convention"], "star": true, "need": 1, "tip": "First president."}, {"n": 119, "q": "What is the capital of the United States?", "a": ["Washington, D.C."], "star": false, "need": 1, "tip": "Washington, D.C."}, {"n": 121, "q": "Why does the flag have 13 stripes?", "a": ["(Because there were) 13 original colonies", "(Because the stripes) represent the original colonies"], "star": true, "need": 1, "tip": "13 stripes, 13 colonies."}];
+const LOCKED=["Unlimited new random tests from all 128 questions, with every question read aloud", "The 65/20 test", "Study one chapter at a time", "Audio of all 128 questions, at normal and slow speed", "Interview role-play audio", "Reading and writing practice audio", "128 printable question cards", "The 30-day planner", "The score tracker", "The test-day checklist", "The My Current Answers worksheet"];
+const app=document.getElementById('app');
+let state=null, timer=null, player=null;
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function fmt(ms){const s=Math.floor(ms/1000);return Math.floor(s/60)+' min '+String(s%60).padStart(2,'0')+' s';}
+function stopAudio(){try{if(player){player.pause();player.removeAttribute('src');player.load();}}catch(e){}}
+function hear(n){/* recorded voice of the book; if the file cannot load, nothing plays */try{stopAudio();if(!player){player=document.createElement('audio');player.preload='auto';player.setAttribute('playsinline','');document.body.appendChild(player);}player.src='../audio/q/q'+String(n).padStart(3,'0')+'.mp3';const p=player.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}}
+function home(){
+  clearInterval(timer);stopAudio();
+  app.innerHTML=`<div class="card"><p><b>Free demo:</b> 10 questions, with a timer and a score. Tap "Hear the question" to hear each question read aloud.</p><button class="main" onclick="start()">Start the demo</button></div>`;
+}
+function start(){
+  clearInterval(timer);stopAudio();
+  state={list:shuffle(Q),i:0,right:0,wrong:0,missed:[],t0:Date.now()};
+  ask();
+}
+function controls(){return `<div class="card ctl"><button onclick="endTest()">End test and see my score</button><button onclick="askFirst('restart')">Restart test</button><button onclick="askFirst('home')">Back to the start</button><div id="cf"></div></div>`;}
+function askFirst(what){const b=document.getElementById('cf');if(!b)return;b.innerHTML=`<div class="confirm"><p><b>Start again?</b> This test will not be saved.</p><button class="main" onclick="${what==='restart'?'start()':'home()'}">Yes</button><button onclick="document.getElementById('cf').innerHTML=''">No</button></div>`;b.scrollIntoView&&b.scrollIntoView({block:'center'});}
+function endTest(){clearInterval(timer);stopAudio();finish(true);}
+function ask(){
+  stopAudio();
+  const q=state.list[state.i];
+  clearInterval(timer); let s=0;
+  app.innerHTML=`<div id="qa"><div class="card"><div class="small">Question ${state.i+1} of ${state.list.length} &nbsp; | &nbsp; Score: ${state.right} correct, ${state.wrong} wrong &nbsp; | &nbsp; This question: <span id="tm">0</span> s &nbsp; | &nbsp; Test time: <span id="tt">${fmt(Date.now()-state.t0)}</span></div>
+  <p class="q">${q.q}</p><button onclick="hear(${q.n})">Hear the question</button>
+  <p>Say your answer out loud.${q.need>1?' Give '+q.need+' answers.':''}</p><button class="main" onclick="reveal()">Show the answer</button></div></div>${controls()}`;
+  timer=setInterval(()=>{s++;const e=document.getElementById('tm');if(e)e.textContent=s;const t=document.getElementById('tt');if(t)t.textContent=fmt(Date.now()-state.t0);},1000);
+}
+function reveal(){
+  clearInterval(timer);
+  const q=state.list[state.i];
+  document.getElementById('qa').insertAdjacentHTML('beforeend',`<div class="card"><b>USCIS answers (question ${q.n}):</b><ul>${q.a.map(a=>'<li>'+a+'</li>').join('')}</ul><p class="small">Memory tip: ${q.tip}</p>
+  <p>Was your answer correct?</p><button class="main" onclick="mark(true)">Yes, correct</button><button onclick="mark(false)">No, wrong</button></div>`);
+  window.scrollTo(0,document.body.scrollHeight);
+}
+function mark(ok){
+  const q=state.list[state.i];
+  if(ok)state.right++;else{state.wrong++;state.missed.push(q);}
+  state.i++;
+  if(state.i>=state.list.length)finish(false);else ask();
+}
+function finish(early){
+  clearInterval(timer);stopAudio();
+  const took=fmt(Date.now()-state.t0);
+  app.innerHTML=`<div class="card"><p class="q">${early?'Test ended':'Demo finished'}</p>
+  <p>Score: ${state.right} correct, ${state.wrong} wrong${early?' (questions answered so far)':''}. Time: ${took}.</p>
+  <p class="small">On the real test the officer asks up to 20 questions. You pass with 12 correct.</p>
+  ${state.missed.length?`<p><b>Study these again:</b></p><ul>${state.missed.map(q=>'<li>Question '+q.n+': '+q.q+'</li>').join('')}</ul>`:''}
+  <button onclick="start()">Try the demo again</button></div>
+  <div class="card locked"><p><b>Locked in this demo:</b></p><ul>${LOCKED.map(t=>'<li><span>&#128274;</span>'+t+'</li>').join('')}</ul></div>
+  <div class="unlock"><p><b>Unlock everything with the book US Citizenship Test Study Guide 2027 and 2028 in Large Print by Jessica T. Lavercombe.</b></p><p>Already have the book? Scan the code in Chapter 16.</p></div>`;
+  window.scrollTo(0,0);
+}
+home();
+</script></body></html>
