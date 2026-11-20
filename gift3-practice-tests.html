@@ -13,6 +13,9 @@ button.main{background:#1a3d6d;color:#fff}
 .ok{color:#1d6b2f;font-weight:bold}.no{color:#a12222;font-weight:bold}
 select{font-size:22px;padding:8px}
 footer{font-size:16px;color:#555;margin-top:30px}
+.ctl button{display:block;width:100%;margin:10px 0;text-align:center}
+.confirm{background:#fff3c4;border:2px solid #e0b100;border-radius:14px;padding:18px;margin:12px 0}
+.confirm button{display:inline-block;width:auto;min-width:120px}
 </style></head><body><main>
 <h1>Online Exam Simulator</h1>
 <p class="small">For the 2025 civics test. Every test is new and random, so you can take as many as you like. The officer asks questions out loud and you answer out loud. Do the same here: read or listen to the question, say your answer, then check it.</p>
@@ -25,38 +28,47 @@ const app=document.getElementById('app');
 let state=null;
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 function fmt(ms){const s=Math.floor(ms/1000);return Math.floor(s/60)+' min '+String(s%60).padStart(2,'0')+' s';}
-function speak(t){try{const u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=0.9;speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){}}
+let player=null;
+function stopAudio(){try{if(player){player.pause();player.removeAttribute('src');player.load();}}catch(e){}}
+function hear(n){/* recorded voice of the book; if the file cannot load, nothing plays */try{stopAudio();if(!player){player=document.createElement('audio');player.preload='auto';player.setAttribute('playsinline','');document.body.appendChild(player);}player.src='audio/q/q'+String(n).padStart(3,'0')+'.mp3';const p=player.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}}
 function scoreHistory(){try{return JSON.parse(localStorage.getItem('civicsScores')||'[]');}catch(e){return [];}}
 function save(r){try{const h=scoreHistory();h.push(r);localStorage.setItem('civicsScores',JSON.stringify(h.slice(-30)));}catch(e){}}
 function home(){
+  clearInterval(timer);stopAudio();
   const h=scoreHistory().slice(-5).reverse();
   app.innerHTML=`<div class="card"><p><b>Full test:</b> 20 random questions from all 128. Like the officer, the test stops at 12 correct (pass) or 9 wrong.</p><button class="main" onclick="start('full')">Start full test</button></div>
   <div class="card"><p><b>65/20 test:</b> 10 random questions from the 20 questions for the 65/20 rule. Stops at 6 correct (pass) or 5 wrong.</p><button class="main" onclick="start('6520')">Start 65/20 test</button></div>
   <div class="card"><p><b>Study one chapter:</b> every question in one chapter of the book.</p><select id="chs">${CH.map((c,i)=>`<option value="${i}">Chapter ${c.ch}: ${c.title}</option>`).join('')}</select><br><button onclick="start('ch')">Start chapter</button></div>
   ${h.length?`<div class="card"><b>Your last scores on this device</b><br>${h.map(r=>`${r.date}: ${r.mode}, ${r.right} correct, ${r.wrong} wrong, ${r.result}`).join('<br>')}</div>`:''}`;
 }
-function start(mode){
+function start(mode,chi){
+  clearInterval(timer);stopAudio();
   let list, pass=null, fail=null, name;
   if(mode==='full'){list=shuffle(Q).slice(0,20);pass=12;fail=9;name='Full test';}
   else if(mode==='6520'){list=shuffle(Q.filter(q=>q.star)).slice(0,10);pass=6;fail=5;name='65/20 test';}
-  else{const c=CH[+document.getElementById('chs').value];list=Q.filter(q=>q.n>=c.a&&q.n<=c.b);name='Chapter '+c.ch;}
-  state={list,i:0,right:0,wrong:0,missed:[],pass,fail,name,mode,t0:Date.now()};
+  else{if(chi==null)chi=+document.getElementById('chs').value;const c=CH[chi];list=Q.filter(q=>q.n>=c.a&&q.n<=c.b);name='Chapter '+c.ch;}
+  state={list,i:0,right:0,wrong:0,missed:[],pass,fail,name,mode,chi,t0:Date.now()};
   ask();
 }
 let timer=null;
+function controls(){return `<div class="card ctl"><button onclick="endTest()">End test and see my score</button><button onclick="askFirst('restart')">Restart test</button><button onclick="askFirst('home')">Back to the start</button><div id="cf"></div></div>`;}
+function askFirst(what){const b=document.getElementById('cf');if(!b)return;b.innerHTML=`<div class="confirm"><p><b>Start again?</b> This test will not be saved.</p><button class="main" onclick="${what==='restart'?'restartTest()':'home()'}">Yes</button><button onclick="document.getElementById('cf').innerHTML=''">No</button></div>`;b.scrollIntoView&&b.scrollIntoView({block:'center'});}
+function restartTest(){start(state.mode,state.chi);}
+function endTest(){clearInterval(timer);stopAudio();finish(true);}
 function ask(){
+  stopAudio();
   const q=state.list[state.i];
   clearInterval(timer); let s=0;
-  app.innerHTML=`<div class="card"><div class="small">Question ${state.i+1} of ${state.list.length} &nbsp; | &nbsp; Score: ${state.right} correct, ${state.wrong} wrong &nbsp; | &nbsp; This question: <span id="tm">0</span> s &nbsp; | &nbsp; Test time: <span id="tt">${fmt(Date.now()-state.t0)}</span></div>
-  <p class="q">${q.q}</p><button onclick="speak(Q.find(x=>x.n===${q.n}).q)">Hear the question</button>
-  <p>Say your answer out loud.${q.need>1?' Give '+q.need+' answers.':''}</p><button class="main" onclick="reveal()">Show the answer</button></div>`;
+  app.innerHTML=`<div id="qa"><div class="card"><div class="small">Question ${state.i+1} of ${state.list.length} &nbsp; | &nbsp; Score: ${state.right} correct, ${state.wrong} wrong &nbsp; | &nbsp; This question: <span id="tm">0</span> s &nbsp; | &nbsp; Test time: <span id="tt">${fmt(Date.now()-state.t0)}</span></div>
+  <p class="q">${q.q}</p><button onclick="hear(${q.n})">Hear the question</button>
+  <p>Say your answer out loud.${q.need>1?' Give '+q.need+' answers.':''}</p><button class="main" onclick="reveal()">Show the answer</button></div></div>${controls()}`;
   timer=setInterval(()=>{s++;const e=document.getElementById('tm');if(e)e.textContent=s;const t=document.getElementById('tt');if(t)t.textContent=fmt(Date.now()-state.t0);},1000);
 }
 function reveal(){
   clearInterval(timer);
   const q=state.list[state.i];
-  app.innerHTML+=`<div class="card"><b>USCIS answers (question ${q.n}):</b><ul>${q.a.map(a=>'<li>'+a+'</li>').join('')}</ul><p class="small">Memory tip: ${q.tip}</p>
-  <p>Was your answer correct?</p><button class="main" onclick="mark(true)">Yes, correct</button><button onclick="mark(false)">No, wrong</button></div>`;
+  document.getElementById('qa').insertAdjacentHTML('beforeend',`<div class="card"><b>USCIS answers (question ${q.n}):</b><ul>${q.a.map(a=>'<li>'+a+'</li>').join('')}</ul><p class="small">Memory tip: ${q.tip}</p>
+  <p>Was your answer correct?</p><button class="main" onclick="mark(true)">Yes, correct</button><button onclick="mark(false)">No, wrong</button></div>`);
   app.querySelector('button.main').scrollIntoView&&window.scrollTo(0,document.body.scrollHeight);
 }
 function mark(ok){
@@ -66,13 +78,15 @@ function mark(ok){
   const stop=(state.pass&&state.right>=state.pass)||(state.fail&&state.wrong>=state.fail)||state.i>=state.list.length;
   if(stop)finish();else ask();
 }
-function finish(){
+function finish(early){
+  clearInterval(timer);stopAudio();
   let result='done';
   if(state.pass){result=state.right>=state.pass?'PASS':'NOT YET';}
+  if(early&&result!=='PASS')result='ENDED';
   const took=fmt(Date.now()-state.t0);
-  save({date:new Date().toLocaleDateString(),mode:state.name,right:state.right,wrong:state.wrong,result:result+' in '+took});
-  app.innerHTML=`<div class="card"><p class="q">${result==='PASS'?'<span class="ok">You passed!</span>':result==='NOT YET'?'<span class="no">Not yet. Keep studying.</span>':'Finished'}</p>
-  <p>Score: ${state.right} correct, ${state.wrong} wrong. Time: ${took}.</p>
+  save({date:new Date().toLocaleDateString(),mode:state.name,right:state.right,wrong:state.wrong,result:(result==='ENDED'?'ended early':result)+' in '+took});
+  app.innerHTML=`<div class="card"><p class="q">${result==='PASS'?'<span class="ok">You passed!</span>':result==='NOT YET'?'<span class="no">Not yet. Keep studying.</span>':result==='ENDED'?'Test ended':'Finished'}</p>
+  <p>Score: ${state.right} correct, ${state.wrong} wrong${result==='ENDED'?' (questions answered so far)':''}. Time: ${took}.</p>
   ${state.pass?`<p class="small">On the real test, the officer stops at ${state.pass} correct or ${state.fail} wrong.</p>`:''}
   ${state.missed.length?`<p><b>Study these again:</b></p><ul>${state.missed.map(q=>'<li>Question '+q.n+': '+q.q+'</li>').join('')}</ul>`:''}
   ${state.mode!=='ch'?`<button class="main" onclick="start('${state.mode}')">Take a new test</button>`:''}<button onclick="home()">Back to the start</button></div>`;
